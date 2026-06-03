@@ -40,3 +40,21 @@ describe("dedupeFindings", () => {
     expect(out[0].lastSeen).toBe("2026-06-03");
   });
 });
+
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { writeFindings, readFindings } from "../finding.js";
+
+describe("findings IO", () => {
+  it("writes to <baseDir>/<date>/<runId>.json and reads back", () => {
+    const base = mkdtempSync(join(tmpdir(), "qa-"));
+    const f = mk({ id: "z" });
+    const path = writeFindings(base, { date: "2026-06-03", runId: "run42" }, [f]);
+    expect(path).toContain(join("2026-06-03", "run42.json"));
+    expect(readFindings(path)).toEqual([f]);
+  });
+  it("returns [] for a missing path", () => {
+    expect(readFindings("/nope/missing.json")).toEqual([]);
+  });
+});

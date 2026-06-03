@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 export const DIMENSIONS = ["tenancy", "rbac", "functional", "regression", "visual", "a11y", "perf"] as const;
 export type Dimension = (typeof DIMENSIONS)[number];
@@ -53,4 +55,17 @@ export function dedupeFindings(findings: Finding[]): Finding[] {
     });
   }
   return [...byId.values()];
+}
+
+export function writeFindings(baseDir: string, opts: { date: string; runId: string }, findings: Finding[]): string {
+  const dir = join(baseDir, opts.date);
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${opts.runId}.json`);
+  writeFileSync(path, JSON.stringify(findings, null, 2));
+  return path;
+}
+
+export function readFindings(path: string): Finding[] {
+  if (!existsSync(path)) return [];
+  return JSON.parse(readFileSync(path, "utf8")) as Finding[];
 }
