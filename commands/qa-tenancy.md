@@ -4,8 +4,11 @@ description: Run the cross-tenant IDOR audit for this app and write findings.
 
 Run the qa-kit tenancy audit against the current repo:
 
-1. Load the app's `qa.config.ts` from the repo root. Resolve `repoRoot` to the
-   absolute path of the repo if unset. Call `defineQAConfig` to validate it.
+1. Load the app's `qa.config.ts` from the repo root (e.g. via tsx). Interop note:
+   if the app has no `"type": "module"`, the dynamic-import namespace double-nests
+   the default — resolve the config as `mod.default.default ?? mod.default`.
+   Resolve `repoRoot` to the absolute path of the repo if unset. The default export
+   is the already-validated `defineQAConfig(...)` result.
 2. Invoke the workflow: `Workflow({ name: "qa-tenancy", args: <resolved config> })`.
    Wait for it to complete and read the returned
    `{ candidateCount, suspects, verdicts, report }` (the workflow does not return
