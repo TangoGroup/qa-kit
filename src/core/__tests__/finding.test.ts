@@ -58,3 +58,23 @@ describe("findings IO", () => {
     expect(readFindings("/nope/missing.json")).toEqual([]);
   });
 });
+
+import { verdictsToFindings } from "../finding.js";
+
+describe("verdictsToFindings", () => {
+  const verdicts = [
+    { site: "calendar GET", file: "app/api/calendar/[campusId]/route.ts", line: 16, exploitable: true, severity: "critical", reasoning: "no access check", twoTenantRepro: "loginAs(jake) GET other campus", suggestedFix: "add assertCampusAccess before line 17" },
+    { site: "removeTeamMember", file: "team/actions.ts", line: 305, exploitable: false, severity: "low", reasoning: "gated", twoTenantRepro: "n/a", suggestedFix: "n/a" },
+  ];
+  it("maps exploitable→confirmed and non-exploitable→refuted, stamps ids + seen dates", () => {
+    const out = verdictsToFindings({ app: "student-data", runId: "r1", date: "2026-06-03", verdicts });
+    expect(out).toHaveLength(2);
+    const crit = out.find((f) => f.severity === "critical")!;
+    expect(crit.dimension).toBe("tenancy");
+    expect(crit.status).toBe("confirmed");
+    expect(crit.verifiedBy).toBe("adversarial");
+    expect(crit.id).toMatch(/^[0-9a-f]{16}$/);
+    expect(crit.firstSeen).toBe("2026-06-03");
+    expect(out.find((f) => f.severity === "low")!.status).toBe("refuted");
+  });
+});

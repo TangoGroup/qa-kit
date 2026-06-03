@@ -69,3 +69,33 @@ export function readFindings(path: string): Finding[] {
   if (!existsSync(path)) return [];
   return JSON.parse(readFileSync(path, "utf8")) as Finding[];
 }
+
+type TenancyVerdict = {
+  site: string; file?: string; line?: number;
+  exploitable: boolean; severity: Severity;
+  reasoning: string; twoTenantRepro: string; suggestedFix?: string;
+};
+
+export function verdictsToFindings(args: {
+  app: string; runId: string; date: string; verdicts: TenancyVerdict[];
+}): Finding[] {
+  return args.verdicts.map((v) => {
+    const location = { file: v.file, line: v.line };
+    return {
+      id: makeFindingId({ app: args.app, dimension: "tenancy", title: v.site, location }),
+      app: args.app,
+      runId: args.runId,
+      dimension: "tenancy" as const,
+      severity: v.severity,
+      title: v.site,
+      location,
+      evidence: v.reasoning,
+      repro: v.twoTenantRepro,
+      verifiedBy: "adversarial" as const,
+      status: v.exploitable ? ("confirmed" as const) : ("refuted" as const),
+      suggestedFix: v.suggestedFix,
+      firstSeen: args.date,
+      lastSeen: args.date,
+    };
+  });
+}
