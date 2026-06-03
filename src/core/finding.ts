@@ -77,7 +77,7 @@ type TenancyVerdict = {
 };
 
 export function verdictsToFindings(args: {
-  app: string; runId: string; date: string; verdicts: TenancyVerdict[];
+  app: string; runId: string; date: string; verdicts: readonly TenancyVerdict[];
 }): Finding[] {
   return args.verdicts.map((v) => {
     const location = { file: v.file, line: v.line };

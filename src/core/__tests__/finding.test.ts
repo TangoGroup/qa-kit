@@ -65,7 +65,7 @@ describe("verdictsToFindings", () => {
   const verdicts = [
     { site: "calendar GET", file: "app/api/calendar/[campusId]/route.ts", line: 16, exploitable: true, severity: "critical", reasoning: "no access check", twoTenantRepro: "loginAs(jake) GET other campus", suggestedFix: "add assertCampusAccess before line 17" },
     { site: "removeTeamMember", file: "team/actions.ts", line: 305, exploitable: false, severity: "low", reasoning: "gated", twoTenantRepro: "n/a", suggestedFix: "n/a" },
-  ];
+  ] as const;
   it("maps exploitable→confirmed and non-exploitable→refuted, stamps ids + seen dates", () => {
     const out = verdictsToFindings({ app: "student-data", runId: "r1", date: "2026-06-03", verdicts });
     expect(out).toHaveLength(2);
