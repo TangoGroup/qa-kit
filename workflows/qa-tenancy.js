@@ -12,7 +12,12 @@ export const meta = {
   ],
 }
 
-const cfg = args
+// `args` is the resolved QAConfig. Some runtimes deliver it as a JSON string
+// rather than an object — tolerate both, and fail loud if it's unusable.
+const cfg = typeof args === 'string' ? JSON.parse(args) : args
+if (!cfg || !cfg.tenancy || !cfg.tenancy.key) {
+  throw new Error('qa-tenancy: args must be a resolved QAConfig with tenancy.key (got: ' + typeof args + ')')
+}
 const ROOT = cfg.repoRoot
 const TKEY = cfg.tenancy.key
 const HELPER = cfg.tenancy.accessHelper
