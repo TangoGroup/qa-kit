@@ -20,7 +20,7 @@ export type Finding = {
   repro: string;
   verifiedBy: "adversarial" | "tournament" | "single" | "deterministic";
   status: "confirmed" | "refuted" | "known";
-  score?: { value: number; max: number; weight?: number; dimension: string };
+  score?: { value: number; max: number; weight?: number; dimension: Dimension };
   suggestedFix?: string;
   firstSeen: string;
   lastSeen: string;
@@ -32,7 +32,9 @@ export function makeFindingId(
   f: Pick<Finding, "app" | "dimension" | "title"> & { location?: Finding["location"] },
 ): string {
   const loc = f.location ?? {};
-  const key = [f.app, f.dimension, f.title, loc.file ?? "", loc.line ?? "", loc.route ?? ""].join("::");
+  // JSON-encode the field array so values containing the field separator can't
+  // shift a boundary and make two logically-different findings hash alike.
+  const key = JSON.stringify([f.app, f.dimension, f.title, loc.file ?? null, loc.line ?? null, loc.route ?? null]);
   return createHash("sha256").update(key).digest("hex").slice(0, 16);
 }
 
@@ -67,6 +69,8 @@ export function writeFindings(baseDir: string, opts: { date: string; runId: stri
 
 export function readFindings(path: string): Finding[] {
   if (!existsSync(path)) return [];
+  // Corrupt/malformed findings files should fail loudly rather than silently
+  // returning [] (which would masquerade as "no findings" / a clean run).
   return JSON.parse(readFileSync(path, "utf8")) as Finding[];
 }
 
@@ -80,7 +84,11 @@ export function verdictsToFindings(args: {
   app: string; runId: string; date: string; verdicts: readonly TenancyVerdict[];
 }): Finding[] {
   return args.verdicts.map((v) => {
-    const location = { file: v.file, line: v.line };
+    // Only include defined keys: JSON write→read drops `undefined`, so emitting
+    // `{ file: undefined }` would break deep-equality on round-trip (regression tracking).
+    const location: Finding["location"] = {};
+    if (v.file !== undefined) location.file = v.file;
+    if (v.line !== undefined) location.line = v.line;
     return {
       id: makeFindingId({ app: args.app, dimension: "tenancy", title: v.site, location }),
       app: args.app,
