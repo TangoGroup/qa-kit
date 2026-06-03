@@ -33,3 +33,24 @@ export function makeFindingId(
   const key = [f.app, f.dimension, f.title, loc.file ?? "", loc.line ?? "", loc.route ?? ""].join("::");
   return createHash("sha256").update(key).digest("hex").slice(0, 16);
 }
+
+const SEVERITY_ORDER: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+export function compareSeverity(a: Severity, b: Severity): number {
+  return SEVERITY_ORDER[a] - SEVERITY_ORDER[b];
+}
+
+export function dedupeFindings(findings: Finding[]): Finding[] {
+  const byId = new Map<string, Finding>();
+  for (const f of findings) {
+    const existing = byId.get(f.id);
+    if (!existing) { byId.set(f.id, f); continue; }
+    const higher = compareSeverity(f.severity, existing.severity) < 0 ? f : existing;
+    byId.set(f.id, {
+      ...higher,
+      firstSeen: existing.firstSeen < f.firstSeen ? existing.firstSeen : f.firstSeen,
+      lastSeen: existing.lastSeen > f.lastSeen ? existing.lastSeen : f.lastSeen,
+    });
+  }
+  return [...byId.values()];
+}

@@ -15,3 +15,28 @@ describe("makeFindingId", () => {
     expect(makeFindingId({ app: "x", dimension: "perf", title: "t" })).toMatch(/^[0-9a-f]{16}$/);
   });
 });
+
+import { compareSeverity, dedupeFindings, type Finding } from "../finding.js";
+
+const mk = (over: Partial<Finding>): Finding => ({
+  id: "id1", app: "a", runId: "r", dimension: "tenancy", severity: "high",
+  title: "t", location: {}, evidence: "", repro: "", verifiedBy: "single",
+  status: "confirmed", firstSeen: "2026-06-01", lastSeen: "2026-06-01", ...over,
+});
+
+describe("compareSeverity", () => {
+  it("orders critical before low", () => { expect(compareSeverity("critical", "low")).toBeLessThan(0); });
+});
+
+describe("dedupeFindings", () => {
+  it("collapses same id, keeps higher severity, widens seen range", () => {
+    const out = dedupeFindings([
+      mk({ id: "x", severity: "medium", firstSeen: "2026-06-02", lastSeen: "2026-06-02" }),
+      mk({ id: "x", severity: "critical", firstSeen: "2026-06-01", lastSeen: "2026-06-03" }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].severity).toBe("critical");
+    expect(out[0].firstSeen).toBe("2026-06-01");
+    expect(out[0].lastSeen).toBe("2026-06-03");
+  });
+});
