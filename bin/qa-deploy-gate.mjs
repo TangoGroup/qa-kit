@@ -6,11 +6,11 @@ import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { bundleTruthVerdict, roundtripResultsToFindings } from "qa-kit/evals";
-import { writeFindings } from "qa-kit/core";
+import { writeFindings, makeFindingId } from "qa-kit/core";
 
 const [cfgJson, url, expectedSha, outDir, runId, date] = process.argv.slice(2);
 const cfg = JSON.parse(cfgJson);
-const healthPath = cfg.envs?.staging?.healthPath ?? cfg.commands?.healthPath ?? "/api/health";
+const healthPath = cfg.commands?.healthPath ?? cfg.envs?.staging?.healthPath ?? "/api/health";
 
 async function fetchHealth() {
   try {
@@ -30,16 +30,31 @@ if (bt) findings.push(bt);
 // Round-trips: only run if bundle-truth passed (no point testing a stale build).
 if (!bt || bt.severity !== "critical") {
   const reportPath = join(outDir, `pw-${runId}.json`);
-  const cmd = cfg.commands?.e2eRoundtrip ?? "pnpm e2e:roundtrip";
+  // Force the JSON reporter via CLI args (PW_TEST_REPORTER is NOT a real env var,
+  // so it would never activate). Appending to the `pnpm run` script forwards the
+  // args to `playwright test`; `line` keeps human output on the inherited stdio.
+  const cmd = (cfg.commands?.e2eRoundtrip ?? "pnpm e2e:roundtrip") + " --reporter=json,line";
   try {
     execSync(cmd, {
       stdio: "inherit",
-      env: { ...process.env, PLAYWRIGHT_BASE_URL: url, PLAYWRIGHT_JSON_OUTPUT_NAME: reportPath, PW_TEST_REPORTER: "json" },
+      env: { ...process.env, PLAYWRIGHT_BASE_URL: url, PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath },
     });
-  } catch { /* non-zero exit = some specs failed; we parse the report below */ }
+  } catch { /* non-zero exit = some specs failed; the report is parsed below, and the missing-report guard catches a crash/no-run */ }
   if (existsSync(reportPath)) {
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     findings.push(...roundtripResultsToFindings({ app: cfg.app.name, runId, date, report }));
+  } else {
+    // No report despite round-trips being scheduled = suite crashed or never ran.
+    // Treat as a finding (NOT silent zero) so a missing report can't look "all passed".
+    const location = { route: "(round-trip suite)" };
+    findings.push({
+      id: makeFindingId({ app: cfg.app.name, dimension: "regression", title: "round-trip report missing", location }),
+      app: cfg.app.name, runId, dimension: "regression", severity: "high",
+      title: "round-trip report missing — suite may have crashed; gate could not verify",
+      location, evidence: `expected Playwright JSON report at ${reportPath} but none was written`,
+      repro: cmd, verifiedBy: "deterministic", status: "confirmed",
+      firstSeen: date, lastSeen: date,
+    });
   }
 }
 
