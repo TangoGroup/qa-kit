@@ -22,7 +22,8 @@
   },
   "bin": {
     "qa-deploy-gate": "./bin/qa-deploy-gate.mjs",
-    "qa-visual-eval": "./bin/qa-visual-eval.mjs"
+    "qa-visual-eval": "./bin/qa-visual-eval.mjs",
+    "qa-report": "./bin/qa-report.mjs"
   },
   "scripts": {
     "test": "vitest run",
