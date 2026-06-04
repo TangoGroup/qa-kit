@@ -63,3 +63,17 @@ describe("aggregatePersonaScores", () => {
     expect(out.verdict).toBe("fail");
   });
 });
+
+import { prepareScoreTrend } from "../score.js";
+
+describe("prepareScoreTrend", () => {
+  it("formats scored findings for dashboard ingest (drops unscored)", () => {
+    const rows = prepareScoreTrend({
+      findings: [pf("jake", "clarity", 4), { ...pf("jake", "x", 0), score: undefined }],
+      timestamp: "2026-06-03T00:00:00Z",
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ app: "a", dimension: "functional", value: 4, max: 5, persona: "jake", runId: "r", timestamp: "2026-06-03T00:00:00Z" });
+    expect(rows[0].stableId).toBe("jake-clarity");
+  });
+});

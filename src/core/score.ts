@@ -65,3 +65,14 @@ export function aggregatePersonaScores(args: {
   const threshold = args.rubrics.persona?.passThreshold ?? 0;
   return { dimensionScores, overall: { value, max: maxRef }, verdict: value >= threshold ? "pass" : "fail" };
 }
+
+export function prepareScoreTrend(args: { findings: Finding[]; timestamp: string }): Array<{
+  stableId: string; app: string; dimension: Dimension; rubricKey: string;
+  value: number; max: number; weight?: number; timestamp: string; runId: string; persona?: string;
+}> {
+  return args.findings.filter((f) => f.score).map((f) => ({
+    stableId: f.id, app: f.app, dimension: f.dimension, rubricKey: f.score!.rubricKey,
+    value: f.score!.value, max: f.score!.max, weight: f.score!.weight,
+    timestamp: args.timestamp, runId: f.runId, persona: f.location?.persona,
+  }));
+}
