@@ -18,12 +18,28 @@ export function latticeViolations(args: {
     const broader = args.hierarchy[i + 1];
     const nSet = args.fieldSetsByRole[narrower];
     const bSet = args.fieldSetsByRole[broader];
-    if (!nSet || !bSet || isUniversal(nSet) || isUniversal(bSet)) continue; // universal broader = covers all; universal narrower handled by config check elsewhere
+    if (!nSet || !bSet || isUniversal(bSet)) continue; // missing set, or broader covers all → genuinely no violation
+    if (isUniversal(nSet)) {
+      // UNIVERSAL narrower with a RESTRICTED broader: the narrowest role sees
+      // everything while a broader role is restricted — the worst lattice
+      // inversion. Emit one critical finding (every field leaks) and move on.
+      const title = `${args.kind} fields: narrower role ${narrower} sees ALL fields but broader ${broader} is restricted (lattice inversion)`;
+      const location = { persona: narrower };
+      out.push({
+        id: makeFindingId({ app: args.app, dimension: "rbac", title, location }),
+        app: args.app, runId: args.runId, dimension: "rbac", severity: "critical", title, location,
+        evidence: `${narrower} can ${args.kind === "visible" ? "view" : "edit"} ALL fields (["*"]) while the adjacent broader role ${broader} is restricted to a finite set — inverts the role subset lattice`,
+        repro: `compare ${args.kind} field sets of ${narrower} vs ${broader} from the oracle`,
+        verifiedBy: "deterministic", status: "confirmed",
+        firstSeen: args.date, lastSeen: args.date,
+      });
+      continue;
+    }
     const broaderHas = new Set(bSet);
-    for (const field of nSet) {
+    for (const field of new Set(nSet)) {
       if (broaderHas.has(field)) continue;
       const severity = classifyFieldSeverity(field);
-      const title = `${args.kind} field "${field}" exposed to narrower role but not broader`;
+      const title = `${args.kind} field "${field}" exposed to ${narrower} but not broader ${broader}`;
       const location = { persona: narrower };
       out.push({
         id: makeFindingId({ app: args.app, dimension: "rbac", title, location }),

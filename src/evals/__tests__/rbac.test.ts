@@ -29,9 +29,58 @@ describe("latticeViolations", () => {
     expect(v).toHaveLength(1);
     expect(v[0]).toMatchObject({ dimension: "rbac", verifiedBy: "deterministic", status: "confirmed" });
     expect(v[0].title).toContain("isDonor");
+    expect(v[0].title).toContain("student_leader");
+    expect(v[0].title).toContain("campus_staff");
     expect(v[0].evidence).toContain("student_leader");
     expect(v[0].evidence).toContain("campus_staff");
     expect(v[0].location).toEqual({ persona: "student_leader" });
+  });
+  it("flags a UNIVERSAL narrower with a restricted broader as a critical lattice inversion", () => {
+    const v = latticeViolations({
+      app: "student-data", runId: "r1", date: "2026-06-04", kind: "visible",
+      hierarchy: ["student_leader", "campus_staff"],
+      fieldSetsByRole: {
+        student_leader: UNIVERSAL,        // narrowest role sees EVERYTHING
+        campus_staff: ["firstName"],      // broader role is restricted
+      },
+    });
+    expect(v).toHaveLength(1);
+    expect(v[0].severity).toBe("critical");
+    expect(v[0].title).toMatch(/inversion/i);
+    expect(v[0].title).toContain("student_leader");
+    expect(v[0].title).toContain("campus_staff");
+    expect(v[0].location).toEqual({ persona: "student_leader" });
+    expect(v[0]).toMatchObject({ dimension: "rbac", verifiedBy: "deterministic", status: "confirmed" });
+  });
+  it("gives the SAME leaked field on DIFFERENT role pairs DISTINCT ids", () => {
+    // Two distinct narrower→broader pairs each leak the SAME field (isDonor),
+    // with DIFFERENT narrower roles (student_leader and area_director).
+    // Without role identity in the title, both would hash to the same id (the
+    // finding-id excludes location.persona) and dedupeFindings would drop one.
+    const v = latticeViolations({
+      app: "student-data", runId: "r1", date: "2026-06-04", kind: "visible",
+      hierarchy: ["student_leader", "campus_staff", "area_director", "regional_director"],
+      fieldSetsByRole: {
+        student_leader: ["isDonor"],     // leaks isDonor vs campus_staff
+        campus_staff: [],
+        area_director: ["isDonor"],      // leaks isDonor vs regional_director
+        regional_director: [],
+      },
+    });
+    const donorFindings = v.filter((f) => f.title.includes("isDonor"));
+    expect(donorFindings).toHaveLength(2);
+    expect(donorFindings[0].id).not.toEqual(donorFindings[1].id);
+  });
+  it("dedupes duplicate fields in the narrower set (no duplicate findings)", () => {
+    const v = latticeViolations({
+      app: "student-data", runId: "r1", date: "2026-06-04", kind: "visible",
+      hierarchy: ["student_leader", "campus_staff"],
+      fieldSetsByRole: {
+        student_leader: ["isDonor", "isDonor", "isDonor"],
+        campus_staff: [],
+      },
+    });
+    expect(v).toHaveLength(1);
   });
   it("treats UNIVERSAL broader as covering everything (no violation)", () => {
     const v = latticeViolations({
