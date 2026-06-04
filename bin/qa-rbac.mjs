@@ -11,10 +11,16 @@ const roles = cfg.rbac?.roles ?? cfg.personas?.matrix ?? [];
 if (!oraclePath || roles.length === 0) {
   console.error("qa:rbac — need rbac.fieldVisibility (oracle path) + rbac.roles/personas.matrix"); process.exit(2);
 }
+if (!cfg.app?.name) {
+  console.error("qa:rbac — config needs app.name"); process.exit(2);
+}
 
+// A CJS-authored / differently-transpiled oracle exposes its named exports under
+// `oracle.default` (the CJS/ESM double-default interop) — tolerate both shapes.
 const oracle = await import(oraclePath);
-const getVisible = oracle.getVisibleContactFields;
-const getEditable = oracle.getEditableContactFields;
+const o = oracle.default ?? oracle;
+const getVisible = o.getVisibleContactFields ?? oracle.getVisibleContactFields;
+const getEditable = o.getEditableContactFields ?? oracle.getEditableContactFields;
 if (typeof getVisible !== "function" || typeof getEditable !== "function") {
   console.error(`qa:rbac — oracle ${oraclePath} must export getVisibleContactFields + getEditableContactFields`); process.exit(2);
 }
