@@ -25,9 +25,13 @@ describe("evalResultToScoredFinding", () => {
   it("defaults verifiedBy to 'single'", () => {
     expect(evalResultToScoredFinding(base).verifiedBy).toBe("single");
   });
+  it("round-trips a provided weight onto score.weight", () => {
+    const f = evalResultToScoredFinding({ ...base, weight: 1.5 });
+    expect(f.score?.weight).toBe(1.5);
+  });
 });
 
-import { scoresByDimension, aggregatePersonaScores } from "../score.js";
+import { scoresByRubricKey, aggregatePersonaScores } from "../score.js";
 import type { Finding } from "../finding.js";
 import type { RubricsConfig } from "../config.js";
 
@@ -38,9 +42,9 @@ const pf = (persona: string, rubricKey: string, value: number): Finding => ({
   score: { value, max: 5, rubricKey }, firstSeen: "d", lastSeen: "d",
 });
 
-describe("scoresByDimension", () => {
+describe("scoresByRubricKey", () => {
   it("groups scored findings by rubricKey", () => {
-    const g = scoresByDimension([pf("jake", "taskCompletion", 3), pf("jake", "clarity", 4)]);
+    const g = scoresByRubricKey([pf("jake", "taskCompletion", 3), pf("jake", "clarity", 4)]);
     expect(Object.keys(g).sort()).toEqual(["clarity", "taskCompletion"]);
   });
 });
@@ -60,6 +64,26 @@ describe("aggregatePersonaScores", () => {
   });
   it("fails when weighted overall is below threshold", () => {
     const out = aggregatePersonaScores({ findings: [pf("jake", "taskCompletion", 1), pf("jake", "clarity", 1)], rubrics, persona: "jake" });
+    expect(out.verdict).toBe("fail");
+  });
+  it("takes overall.max from the FIRST matched dimension, not last-wins", () => {
+    // Two dimensions whose findings carry different `max`; overall.max must be
+    // the first matched dimension's max (10), not the last iteration's (3).
+    const tenScale: Finding = { ...pf("jake", "taskCompletion", 8), score: { value: 8, max: 10, rubricKey: "taskCompletion" } };
+    const threeScale: Finding = { ...pf("jake", "clarity", 2), score: { value: 2, max: 3, rubricKey: "clarity" } };
+    const out = aggregatePersonaScores({ findings: [tenScale, threeScale], rubrics, persona: "jake" });
+    expect(out.overall.max).toBe(10);
+  });
+  it("an unscored persona (no matched dimensions) fails — cannot pass unscored", () => {
+    const out = aggregatePersonaScores({ findings: [], rubrics, persona: "jake" });
+    expect(out.overall.value).toBe(0);
+    expect(out.dimensionScores).toEqual({});
+    expect(out.verdict).toBe("fail");
+  });
+  it("an unscored persona fails even when passThreshold is unset (would default to 0)", () => {
+    // Guards the 0 >= 0 → "pass" trap: a never-scored persona must not pass.
+    const noThreshold: RubricsConfig = { persona: { dimensions: [{ key: "taskCompletion", weight: 1 }] } };
+    const out = aggregatePersonaScores({ findings: [], rubrics: noThreshold, persona: "jake" });
     expect(out.verdict).toBe("fail");
   });
 });

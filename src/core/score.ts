@@ -30,7 +30,7 @@ export function evalResultToScoredFinding(args: {
   };
 }
 
-export function scoresByDimension(findings: Finding[]): Record<string, Finding[]> {
+export function scoresByRubricKey(findings: Finding[]): Record<string, Finding[]> {
   const out: Record<string, Finding[]> = {};
   for (const f of findings) {
     if (!f.score) continue;
@@ -51,7 +51,9 @@ export function aggregatePersonaScores(args: {
   const dimensionScores: Record<string, { value: number; max: number; weight: number }> = {};
   let weightedSum = 0;
   let weightTotal = 0;
-  let maxRef = 5;
+  // Persona rubric dimensions are assumed to share one scale, so overall.max is
+  // taken from the FIRST matched dimension's max (not last-wins / iteration order).
+  let maxRef: number | undefined;
   for (const dim of dims) {
     const f = personaFindings.find((x) => x.score!.rubricKey === dim.key);
     if (!f) continue;
@@ -59,11 +61,13 @@ export function aggregatePersonaScores(args: {
     dimensionScores[dim.key] = { value: f.score!.value, max: f.score!.max, weight };
     weightedSum += f.score!.value * weight;
     weightTotal += weight;
-    maxRef = f.score!.max;
+    if (maxRef === undefined) maxRef = f.score!.max;
   }
   const value = weightTotal ? weightedSum / weightTotal : 0;
   const threshold = args.rubrics.persona?.passThreshold ?? 0;
-  return { dimensionScores, overall: { value, max: maxRef }, verdict: value >= threshold ? "pass" : "fail" };
+  // A never-scored persona (no dimensions matched) cannot pass — you can't pass unscored.
+  const verdict = weightTotal === 0 ? "fail" : value >= threshold ? "pass" : "fail";
+  return { dimensionScores, overall: { value, max: maxRef ?? 5 }, verdict };
 }
 
 export function prepareScoreTrend(args: { findings: Finding[]; timestamp: string }): Array<{
