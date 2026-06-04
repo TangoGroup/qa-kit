@@ -59,6 +59,19 @@ if (!bt || bt.severity !== "critical") {
 }
 
 const path = writeFindings(outDir, { date, runId }, findings);
+
+// Best-effort dashboard ingest — never affects the gate's pass/fail.
+if (process.env.QA_DASHBOARD_SUPABASE_URL && process.env.QA_DASHBOARD_SERVICE_KEY) {
+  try {
+    const { ingestFindings } = await import("qa-kit/dashboard");
+    const r = await ingestFindings({
+      url: process.env.QA_DASHBOARD_SUPABASE_URL, key: process.env.QA_DASHBOARD_SERVICE_KEY,
+      findings, scoreRows: [],
+    });
+    console.log(r.ok ? "qa:dashboard — ingested" : `qa:dashboard — ingest errors: ${r.errors.join("; ")}`);
+  } catch (e) { console.warn(`qa:dashboard — ingest skipped: ${e instanceof Error ? e.message : e}`); }
+}
+
 const criticals = findings.filter((f) => f.severity === "critical").length;
 console.log(`qa:deploy-gate — ${findings.length} findings (${criticals} critical) written to ${path}`);
 if (criticals > 0) { console.error("qa:deploy-gate FAILED — critical findings block this deploy."); process.exit(1); }
