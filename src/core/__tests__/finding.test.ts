@@ -89,6 +89,10 @@ describe("dedupeFindings", () => {
     expect(out).toHaveLength(3);
     expect(out.map((f) => f.id).sort()).toEqual(["a", "b", "c"]);
   });
+  it("score uses a free-form rubricKey, not the Dimension union", () => {
+    const f: Finding = mk({ score: { value: 2, max: 5, weight: 1.5, rubricKey: "taskCompletion" } });
+    expect(f.score?.rubricKey).toBe("taskCompletion");
+  });
 });
 
 import { mkdtempSync, writeFileSync } from "node:fs";

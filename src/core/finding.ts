@@ -20,7 +20,7 @@ export type Finding = {
   repro: string;
   verifiedBy: "adversarial" | "tournament" | "single" | "deterministic";
   status: "confirmed" | "refuted" | "known";
-  score?: { value: number; max: number; weight?: number; dimension: Dimension };
+  score?: { value: number; max: number; weight?: number; rubricKey: string }; // rubricKey: metric key (e.g. "taskCompletion") OR a Dimension string for single-metric evals
   suggestedFix?: string;
   firstSeen: string;
   lastSeen: string;
