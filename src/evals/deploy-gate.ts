@@ -18,8 +18,14 @@ export function bundleTruthVerdict(args: {
     evidence, repro: `GET ${args.url}/api/health`, verifiedBy: "deterministic", status: "confirmed",
     firstSeen: args.date, lastSeen: args.date,
   });
-  if (!args.fetched) return mk("high", "Deploy health endpoint unreachable", `GET ${args.url}/api/health returned no usable build info`);
-  const short = (s: string) => s.slice(0, 7);
+  // A missing fetch OR a blank/whitespace-only sha both mean "no usable build
+  // info" — treat them the same (HIGH unreachable), never a stale-build critical.
+  if (!args.fetched || !args.fetched.sha?.trim()) {
+    return mk("high", "Deploy health endpoint unreachable", `GET ${args.url}/api/health returned no usable build info`);
+  }
+  // Normalize before comparing so case-only or whitespace-padded SHAs don't
+  // produce false "stale build" criticals.
+  const short = (s: string) => s.trim().toLowerCase().slice(0, 7);
   if (short(args.fetched.sha) !== short(args.expectedSha)) {
     return mk("critical", "Stale/cached deploy — bundle SHA mismatch",
       `deployed sha ${args.fetched.sha} != expected ${args.expectedSha} (alias may point at a cached build)`);

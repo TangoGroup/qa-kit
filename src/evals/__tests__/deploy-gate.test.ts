@@ -30,6 +30,22 @@ describe("bundleTruthVerdict", () => {
   it("skips the check when expectedSha is empty (no SHA to compare)", () => {
     expect(bundleTruthVerdict({ ...base, fetched: { sha: "x", buildTime: "t", env: "preview" }, expectedSha: "" })).toBeNull();
   });
+  it("normalizes case + whitespace before comparing (no false stale criticals)", () => {
+    // case-only difference is a MATCH
+    expect(bundleTruthVerdict({ ...base, fetched: { sha: "ABC1234", buildTime: "t", env: "preview" }, expectedSha: "abc1234" })).toBeNull();
+    // leading-space difference is a MATCH
+    expect(bundleTruthVerdict({ ...base, fetched: { sha: " abc1234", buildTime: "t", env: "preview" }, expectedSha: "abc1234" })).toBeNull();
+  });
+  it("treats a blank deployed sha as unreachable (HIGH), not a mismatch", () => {
+    const f = bundleTruthVerdict({ ...base, fetched: { sha: "", buildTime: "t", env: "preview" }, expectedSha: "new1111" });
+    expect(f!.severity).toBe("high");
+    expect(f!.title).toMatch(/unreachable|health/i);
+  });
+  it("treats sub-7-char shas correctly (slice(0,7) is safe)", () => {
+    const f = bundleTruthVerdict({ ...base, fetched: { sha: "abc", buildTime: "t", env: "preview" }, expectedSha: "abc1234" });
+    expect(f!.severity).toBe("critical");
+    expect(f!.title).toMatch(/stale|bundle|sha/i);
+  });
 });
 
 describe("roundtripResultsToFindings", () => {
@@ -57,5 +73,21 @@ describe("roundtripResultsToFindings", () => {
   it("tolerates a missing/empty report", () => {
     expect(roundtripResultsToFindings({ app: "a", runId: "r", date: "d", report: {} })).toEqual([]);
     expect(roundtripResultsToFindings({ app: "a", runId: "r", date: "d", report: null })).toEqual([]);
+  });
+  it("recurses into nested suites (suites[].suites[])", () => {
+    const nested = {
+      suites: [{
+        title: "outer",
+        suites: [{
+          title: "inner",
+          specs: [{ title: "deep spec", ok: false, file: "e2e/x.spec.ts" }],
+        }],
+      }],
+    };
+    const out = roundtripResultsToFindings({ app: "student-data", runId: "r1", date: "2026-06-04", report: nested });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ dimension: "regression", severity: "critical", verifiedBy: "deterministic" });
+    expect(out[0].title).toContain("deep spec");
+    expect(out[0].location).toEqual({ file: "e2e/x.spec.ts" });
   });
 });
