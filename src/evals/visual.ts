@@ -32,12 +32,19 @@ export async function runVisualEval(args: {
   for (const shot of args.shots) {
     if (!needsAiReview(shot.diffRatio, args.maxDiffPixelRatio)) continue;
     const a = await args.analyze(shot);
-    const s = severityToScore(a.severity);
+    // Belt-and-suspenders: a malformed analysis (e.g. missing/unknown severity)
+    // must never crash the loop — coerce anything unexpected to "info".
+    const sev: AiSeverity =
+      a.severity === "critical" || a.severity === "warning" || a.severity === "info" ? a.severity : "info";
+    const s = severityToScore(sev);
+    // Guard malformed analyses: summary may be absent and issues may not be an array.
+    const summary = typeof a.summary === "string" ? a.summary : "";
+    const issues = Array.isArray(a.issues) ? a.issues : [];
     out.push(evalResultToScoredFinding({
       app: args.app, runId: args.runId, date: args.date,
       dimension: "visual", title: shot.name, severity: s.severity,
       value: s.value, max: s.max, rubricKey: "visual",
-      evidence: `${a.summary}${a.issues.length ? " — " + a.issues.join("; ") : ""}`,
+      evidence: `${summary}${issues.length ? " — " + issues.join("; ") : ""}`,
       location: { route: shot.route, file: shot.file },
     }));
   }
