@@ -5,7 +5,9 @@ export type SurfaceConfig = { actions?: string; apiRoutes?: string; publicRoutes
 export type RubricsConfig = {
   visual?: { baselineDir: string; maxDiffPixelRatio?: number; aiReview?: boolean };
   persona?: { dimensions: { key: string; weight: number; max?: number }[]; passThreshold?: number; flows?: string[] };
-  a11y?: { minTapTargetPx?: number; blockOn?: string[] };
+  // blockOn maps an audit finding kind (e.g. "horizontal-scroll", "small-tap-target")
+  // to a Finding severity; auditFindingsToFindings reads blockOn[kind].
+  a11y?: { minTapTargetPx?: number; blockOn?: Record<string, string> };
   perf?: { lcpMs?: number; inpMs?: number; cls?: number };
 };
 export type QAConfig = {
