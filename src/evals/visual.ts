@@ -14,3 +14,32 @@ export function needsAiReview(diffRatio: number | null, maxDiffPixelRatio: numbe
   if (diffRatio === null) return true;
   return diffRatio >= maxDiffPixelRatio;
 }
+
+import { evalResultToScoredFinding } from "../core/score.js";
+import type { Finding } from "../core/finding.js";
+
+export type Shot = { name: string; route?: string; file?: string; diffRatio: number | null };
+export type AiAnalysis = { severity: AiSeverity; issues: string[]; summary: string };
+
+export async function runVisualEval(args: {
+  app: string; runId: string; date: string;
+  maxDiffPixelRatio: number; aiReview: boolean;
+  shots: Shot[];
+  analyze: (shot: Shot) => Promise<AiAnalysis>;
+}): Promise<Finding[]> {
+  if (!args.aiReview) return [];
+  const out: Finding[] = [];
+  for (const shot of args.shots) {
+    if (!needsAiReview(shot.diffRatio, args.maxDiffPixelRatio)) continue;
+    const a = await args.analyze(shot);
+    const s = severityToScore(a.severity);
+    out.push(evalResultToScoredFinding({
+      app: args.app, runId: args.runId, date: args.date,
+      dimension: "visual", title: shot.name, severity: s.severity,
+      value: s.value, max: s.max, rubricKey: "visual",
+      evidence: `${a.summary}${a.issues.length ? " — " + a.issues.join("; ") : ""}`,
+      location: { route: shot.route, file: shot.file },
+    }));
+  }
+  return out;
+}
