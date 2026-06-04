@@ -14,6 +14,10 @@
     "./dashboard": {
       "types": "./src/dashboard/index.ts",
       "default": "./src/dashboard/index.ts"
+    },
+    "./init": {
+      "types": "./src/init/index.ts",
+      "default": "./src/init/index.ts"
     }
   },
   "bin": {

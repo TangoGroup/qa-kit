@@ -47,3 +47,28 @@ export function addTsconfigExclude(tsconfig: Json): Json {
   if (!exclude.includes("qa.config.ts")) exclude.push("qa.config.ts");
   return { ...tsconfig, exclude };
 }
+
+export function renderCiCaller(opts?: { previewHostMatch?: string }): string {
+  const host = opts?.previewHostMatch ?? "preview.gloo.us";
+  return `name: QA Deploy Gate
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      url: { description: "Deployed URL", required: true }
+      sha: { description: "Expected git SHA", required: true }
+
+jobs:
+  gate:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       contains(github.event.deployment_status.target_url, '${host}'))
+    uses: TangoGroup/qa-kit/.github/workflows/qa-gate.yml@main
+    with:
+      deployed_url: \${{ github.event_name == 'workflow_dispatch' && inputs.url || github.event.deployment_status.target_url }}
+      expected_sha: \${{ github.event_name == 'workflow_dispatch' && inputs.sha || github.sha }}
+    secrets:
+      anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
+`;
+}

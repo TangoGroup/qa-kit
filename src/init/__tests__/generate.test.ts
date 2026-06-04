@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderQaConfig, QA_KIT_DEP, mergePackageJson, addTsconfigExclude } from "../generate.js";
+import { renderQaConfig, QA_KIT_DEP, mergePackageJson, addTsconfigExclude, renderCiCaller } from "../generate.js";
 
 describe("renderQaConfig", () => {
   const cfg = renderQaConfig({
@@ -51,5 +51,21 @@ describe("addTsconfigExclude", () => {
     const out = addTsconfigExclude({ exclude: ["node_modules"] });
     expect(out.exclude).toEqual(["node_modules", "qa.config.ts"]);
     expect(addTsconfigExclude(out).exclude).toEqual(["node_modules", "qa.config.ts"]); // idempotent
+  });
+});
+
+describe("renderCiCaller", () => {
+  const yml = renderCiCaller();
+  it("calls the reusable qa-gate workflow on deployment_status + workflow_dispatch", () => {
+    expect(yml).toContain("uses: TangoGroup/qa-kit/.github/workflows/qa-gate.yml@main");
+    expect(yml).toContain("deployment_status:");
+    expect(yml).toContain("workflow_dispatch:");
+    expect(yml).toContain("deployed_url:");
+    expect(yml).toContain("expected_sha:");
+    expect(yml).toContain("anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}");
+  });
+  it("defaults the preview-host guard but allows overriding", () => {
+    expect(yml).toContain("preview.gloo.us");
+    expect(renderCiCaller({ previewHostMatch: "vercel.app" })).toContain("vercel.app");
   });
 });
