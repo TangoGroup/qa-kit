@@ -33,3 +33,17 @@ export default defineQAConfig({
 });
 `;
 }
+
+type Json = Record<string, any>;
+
+export function mergePackageJson(pkg: Json): Json {
+  const optionalDependencies = { ...(pkg.optionalDependencies ?? {}) };
+  if (!optionalDependencies["qa-kit"]) optionalDependencies["qa-kit"] = QA_KIT_DEP;
+  return { ...pkg, optionalDependencies };
+}
+
+export function addTsconfigExclude(tsconfig: Json): Json {
+  const exclude = [...(tsconfig.exclude ?? [])];
+  if (!exclude.includes("qa.config.ts")) exclude.push("qa.config.ts");
+  return { ...tsconfig, exclude };
+}
