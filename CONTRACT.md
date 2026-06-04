@@ -146,3 +146,64 @@ the gate still blocks on criticals. Ingest never fails the gate.
 In **both** cases the dep stays under `optionalDependencies` (§3). `/qa-init`'s
 `mergePackageJson` never overwrites an existing `qa-kit` entry, so re-running it on student-data
 leaves the `link:` intact.
+
+---
+
+## 6. The RBAC dimension (oracle lattice + live tournament)
+
+The `rbac` dimension verifies that an app's per-role field access forms a **strict-subset
+lattice**: a narrower role must never see or edit a field that the adjacent broader role can't.
+It runs in two complementary modes — a deterministic gate (blocking) and a live tournament
+(advisory).
+
+### 6.1 The oracle contract
+
+For the deterministic check, the app's `rbac.fieldVisibility` module **must export** two
+functions:
+
+```ts
+export function getVisibleContactFields(role: string, globalRole?: string | null): string[];  // ["*"] = all
+export function getEditableContactFields(role: string, globalRole?: string | null): string[]; // ["*"] = all
+```
+
+Each returns the field names the given role may **view** / **edit**, or the universal sentinel
+`["*"]` meaning "all fields" (used for broad roles that are unrestricted). The contract is just
+those two function names + the `string[] | ["*"]` return shape — an app whose oracle lives
+elsewhere or is named differently simply points `rbac.fieldVisibility` at a module that
+re-exports under these names. (student-data's `lib/rbac.ts` already satisfies this.)
+
+### 6.2 `qa.config.rbac` shape
+
+```ts
+rbac?: {
+  fieldVisibility?: string;   // path to the oracle module (the two fns above) — required to run
+  roles?: string[];           // role lattice, narrowest → broadest; falls back to personas.matrix
+  screens?: string[];         // optional high-risk screens for the live tournament
+};
+```
+
+`roles` is the lattice ordering (narrowest first). When absent, the runner falls back to
+`personas.matrix`. `screens` only feeds the live tournament; when omitted the tournament uses a
+sensible default set.
+
+### 6.3 The strict-subset invariant
+
+For each adjacent `(narrower, broader)` pair down the lattice, every field the narrower role can
+view/edit **must** also be in the broader role's set. `["*"]` on the broader role covers
+everything (no violation). The worst case is an **inversion**: a narrower role is universal
+(`["*"]`) while the broader role is restricted — always flagged `critical`. Otherwise severity is
+classified by field sensitivity (donor/consent/PII → critical; demographic → high; identity
+contact fields → medium; cosmetic/timestamps → low; unknown → medium).
+
+### 6.4 Deterministic gate (blocking) vs live tournament (advisory)
+
+| Mode | Source of field sets | Blocks? | `verifiedBy` |
+|------|----------------------|---------|--------------|
+| **Deterministic lattice gate** (`bin/qa-rbac.mjs`) | imports the app oracle via `tsx`, calls the two fns per role, checks the lattice — no browser, CI-able | **Yes** — exits 1 on a critical lattice violation | `deterministic` |
+| **Live tournament** (`workflows/qa-rbac-tournament.js`) | drives each role through high-risk screens with Playwright, snapshots *rendered* fields, a judge compares observed vs oracle + the subset invariant | **No** — advisory (consistent with the other LLM tiers) | `tournament` |
+
+The deterministic gate is the genuinely new, CI-able core: it catches an oracle that violates
+the lattice (e.g. a regression that restricts a broader role while a narrower role keeps a
+field). The live tournament catches UI that **leaks** a field the oracle says is hidden, and
+non-monotonic / write→read anomalies the static oracle can't express. Both emit the uniform
+`Finding` with dimension `rbac`.
