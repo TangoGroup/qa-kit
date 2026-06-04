@@ -18,7 +18,7 @@ export type QAConfig = {
   personas: PersonasConfig;
   envs: Record<string, EnvConfig>;
   surface?: SurfaceConfig;
-  rbac?: { fieldVisibility?: string };
+  rbac?: { fieldVisibility?: string; roles?: string[]; screens?: string[] };
   rubrics?: RubricsConfig;
   commands?: Record<string, string>;
   findings: { dir: string; githubLabels?: string[]; dashboard?: { enabled: boolean; endpoint?: string } };
