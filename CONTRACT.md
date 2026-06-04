@@ -207,3 +207,46 @@ the lattice (e.g. a regression that restricts a broader role while a narrower ro
 field). The live tournament catches UI that **leaks** a field the oracle says is hidden, and
 non-monotonic / write→read anomalies the static oracle can't express. Both emit the uniform
 `Finding` with dimension `rbac`.
+
+---
+
+## 7. Full QA mode — `/qa-all` (the "run everything" entry point)
+
+The individual commands (`/qa-tenancy`, `/qa-rbac`, `/qa-a11y`, `/qa-persona-score`,
+`/qa-visual-eval`, `/qa-deploy-gate`) each run **one** dimension. `/qa-all` is the on-demand
+orchestrator that runs **all** of them in one sweep, writes every dimension's findings into a
+single day-folder, then consolidates the whole run into one deduped + ranked report and
+best-effort ingests the union to the cross-app dashboard. It's the answer to "just QA the whole
+thing."
+
+It comes in **two tiers**, chosen by the argument:
+
+| Tier | Invocation | What it runs | Cost |
+|------|-----------|--------------|------|
+| **Fast** | `/qa-all fast` | The **deterministic** dimensions only: rbac lattice gate (`bin/qa-rbac.mjs`), a11y audit (`/qa-a11y`), and deploy-gate bundle-truth (`bin/qa-deploy-gate.mjs`, when a deployed URL + SHA are available). No LLM. | Cheap, fast — the right default for a quick gate. |
+| **Full** | `/qa-all` | The fast tier **plus** the agentic/LLM dimensions: tenancy (`qa-tenancy` workflow), persona-score (`qa-persona-score` workflow), rbac live tournament (`qa-rbac-tournament` workflow), and the AI visual eval (`qa-visual-eval`). | A large multi-agent run — minutes, significant token cost. |
+
+### How it composes
+
+1. It mints **one shared `runId`** = `qa-all-<YYYYMMDD-HHmmss>` and a single `date`, then runs
+   each dimension tagged with a **per-dimension runId derived from the shared one**
+   (`<runId>-rbac`, `<runId>-a11y`, `<runId>-tenancy`, `<runId>-persona`,
+   `<runId>-rbac-tournament`, `<runId>-visual`, `<runId>-deploy`). Every dimension writes its
+   `Finding[]` into the same `cfg.findings.dir/<date>/` folder.
+2. **Every dimension is best-effort.** If one dimension fails (missing config, staging down,
+   no deployed target), it's logged and skipped — a full sweep never aborts on a single
+   dimension's failure.
+3. **Consolidation + ingest + report** is the new `bin/qa-report.mjs` runner
+   (`qa-report <config-json> <findingsDir> <date>`): it reads **every** `*.json` in the
+   day-folder, flattens them, runs `summarizeFindings` (dedupe by stable id → rank
+   critical→low → per-dimension×severity and per-severity tallies), and prints one consolidated
+   cross-dimension report (totals line, the per-dimension×severity table, the ranked
+   critical/high titles with file/route). It then **best-effort** ingests the deduped union to
+   the dashboard, gated on the same `QA_DASHBOARD_SUPABASE_URL` + `QA_DASHBOARD_SERVICE_KEY`
+   envs from §4 — wrapped in try/catch so an ingest failure (or absent env) never throws.
+   `qa-report` is **pure reporting**: unlike the per-dimension gates it does not exit non-zero
+   on findings — it's the "what did the whole sweep find" view, not a blocking gate.
+
+Both `qa-report.mjs` and the dimension bins it composes run under **`tsx`, not `node`** (per
+§3 — qa-kit's package `exports` point at TypeScript source). `/qa-all` is registered the same
+way as the other commands (it lives in `./commands`, which `plugin.json` exposes wholesale).
