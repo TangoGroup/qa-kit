@@ -6,6 +6,10 @@
     "./core": {
       "types": "./src/core/index.ts",
       "default": "./src/core/index.ts"
+    },
+    "./evals": {
+      "types": "./src/evals/index.ts",
+      "default": "./src/evals/index.ts"
     }
   },
   "scripts": {
@@ -14,8 +18,12 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
-    "vitest": "^3.0.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0"
   }
 }
