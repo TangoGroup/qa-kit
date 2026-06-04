@@ -1,3 +1,4 @@
+import { type RubricsConfig } from "./config.js";
 import { type Dimension, type Finding, makeFindingId } from "./finding.js";
 
 export function evalResultToScoredFinding(args: {
@@ -27,4 +28,40 @@ export function evalResultToScoredFinding(args: {
     score: { value: args.value, max: args.max, weight: args.weight, rubricKey: args.rubricKey },
     firstSeen: args.date, lastSeen: args.date,
   };
+}
+
+export function scoresByDimension(findings: Finding[]): Record<string, Finding[]> {
+  const out: Record<string, Finding[]> = {};
+  for (const f of findings) {
+    if (!f.score) continue;
+    (out[f.score.rubricKey] ??= []).push(f);
+  }
+  return out;
+}
+
+export function aggregatePersonaScores(args: {
+  findings: Finding[]; rubrics: RubricsConfig; persona: string;
+}): {
+  dimensionScores: Record<string, { value: number; max: number; weight: number }>;
+  overall: { value: number; max: number };
+  verdict: "pass" | "fail";
+} {
+  const dims = args.rubrics.persona?.dimensions ?? [];
+  const personaFindings = args.findings.filter((f) => f.location?.persona === args.persona && f.score);
+  const dimensionScores: Record<string, { value: number; max: number; weight: number }> = {};
+  let weightedSum = 0;
+  let weightTotal = 0;
+  let maxRef = 5;
+  for (const dim of dims) {
+    const f = personaFindings.find((x) => x.score!.rubricKey === dim.key);
+    if (!f) continue;
+    const weight = dim.weight ?? 1;
+    dimensionScores[dim.key] = { value: f.score!.value, max: f.score!.max, weight };
+    weightedSum += f.score!.value * weight;
+    weightTotal += weight;
+    maxRef = f.score!.max;
+  }
+  const value = weightTotal ? weightedSum / weightTotal : 0;
+  const threshold = args.rubrics.persona?.passThreshold ?? 0;
+  return { dimensionScores, overall: { value, max: maxRef }, verdict: value >= threshold ? "pass" : "fail" };
 }
