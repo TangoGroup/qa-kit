@@ -36,6 +36,19 @@ const findings = [
   ...latticeViolations({ app: cfg.app.name, runId, date, kind: "editable", hierarchy: roles, fieldSetsByRole: editableByRole }),
 ];
 const path = writeFindings(outDir, { date, runId }, findings);
+
+// Best-effort dashboard ingest — never affects the gate's pass/fail.
+if (process.env.QA_DASHBOARD_SUPABASE_URL && process.env.QA_DASHBOARD_SERVICE_KEY) {
+  try {
+    const { ingestFindings } = await import("qa-kit/dashboard");
+    const r = await ingestFindings({
+      url: process.env.QA_DASHBOARD_SUPABASE_URL, key: process.env.QA_DASHBOARD_SERVICE_KEY,
+      findings, scoreRows: [],
+    });
+    console.log(r.ok ? "qa:dashboard — ingested" : `qa:dashboard — ingest errors: ${r.errors.join("; ")}`);
+  } catch (e) { console.warn(`qa:dashboard — ingest skipped: ${e instanceof Error ? e.message : e}`); }
+}
+
 const crit = findings.filter((f) => f.severity === "critical").length;
 console.log(`qa:rbac (lattice) — ${findings.length} violations (${crit} critical) written to ${path}`);
 if (crit > 0) { console.error("qa:rbac FAILED — critical RBAC lattice violation."); process.exit(1); }
