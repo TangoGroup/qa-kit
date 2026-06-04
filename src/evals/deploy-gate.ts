@@ -26,3 +26,30 @@ export function bundleTruthVerdict(args: {
   }
   return null;
 }
+
+type PwSpec = { title: string; ok: boolean; file?: string };
+type PwSuite = { title?: string; specs?: PwSpec[]; suites?: PwSuite[] };
+
+function collectSpecs(suite: PwSuite): PwSpec[] {
+  const here = suite.specs ?? [];
+  const nested = (suite.suites ?? []).flatMap(collectSpecs);
+  return [...here, ...nested];
+}
+
+export function roundtripResultsToFindings(args: {
+  app: string; runId: string; date: string; report: unknown;
+}): Finding[] {
+  const root = (args.report ?? {}) as { suites?: PwSuite[] };
+  const specs = (root.suites ?? []).flatMap(collectSpecs);
+  return specs.filter((s) => s.ok === false).map((s) => {
+    const location = s.file ? { file: s.file } : {};
+    return {
+      id: makeFindingId({ app: args.app, dimension: "regression", title: s.title, location }),
+      app: args.app, runId: args.runId, dimension: "regression" as const, severity: "critical" as const,
+      title: `round-trip failed: ${s.title}`, location,
+      evidence: `Playwright spec failed against the deployed build`, repro: s.file ?? "(round-trip suite)",
+      verifiedBy: "deterministic" as const, status: "confirmed" as const,
+      firstSeen: args.date, lastSeen: args.date,
+    };
+  });
+}

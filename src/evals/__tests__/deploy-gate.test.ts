@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { bundleTruthVerdict } from "../deploy-gate.js";
+import { roundtripResultsToFindings } from "../deploy-gate.js";
 
 const base = { app: "student-data", runId: "r1", date: "2026-06-04", url: "https://staging.example.com" };
 
@@ -28,5 +29,33 @@ describe("bundleTruthVerdict", () => {
   });
   it("skips the check when expectedSha is empty (no SHA to compare)", () => {
     expect(bundleTruthVerdict({ ...base, fetched: { sha: "x", buildTime: "t", env: "preview" }, expectedSha: "" })).toBeNull();
+  });
+});
+
+describe("roundtripResultsToFindings", () => {
+  // Minimal shape of Playwright's JSON reporter: suites[].specs[].{title, ok, file?}
+  const report = {
+    suites: [{
+      title: "roundtrip-jake",
+      specs: [
+        { title: "logs and archives a contact", ok: true, file: "e2e/roundtrip/jake.spec.ts" },
+        { title: "follow-up appears in queue", ok: false, file: "e2e/roundtrip/jake.spec.ts" },
+      ],
+    }],
+  };
+  it("emits one critical regression finding per FAILED spec only", () => {
+    const out = roundtripResultsToFindings({ app: "student-data", runId: "r1", date: "2026-06-04", report });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ dimension: "regression", severity: "critical", verifiedBy: "deterministic" });
+    expect(out[0].title).toContain("follow-up appears in queue");
+    expect(out[0].location).toEqual({ file: "e2e/roundtrip/jake.spec.ts" });
+  });
+  it("returns [] when all specs pass", () => {
+    const ok = { suites: [{ title: "rt", specs: [{ title: "a", ok: true }] }] };
+    expect(roundtripResultsToFindings({ app: "a", runId: "r", date: "d", report: ok })).toEqual([]);
+  });
+  it("tolerates a missing/empty report", () => {
+    expect(roundtripResultsToFindings({ app: "a", runId: "r", date: "d", report: {} })).toEqual([]);
+    expect(roundtripResultsToFindings({ app: "a", runId: "r", date: "d", report: null })).toEqual([]);
   });
 });
