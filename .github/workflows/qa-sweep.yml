@@ -1,0 +1,50 @@
+# ~/qa-kit/.github/workflows/qa-sweep.yml
+name: qa-kit scheduled sweep (reusable)
+on:
+  workflow_call:
+    secrets:
+      qa_dashboard_supabase_url: { required: false }
+      qa_dashboard_service_key: { required: false }
+
+jobs:
+  rbac-sweep:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      # Consumer + qa-kit are checked out as SIBLINGS under the workspace so the
+      # consumer's OPTIONAL `link:../qa-kit` dep resolves on a CI runner (no sibling
+      # dir otherwise → dead link → sweep can't run). qa-kit is public now, so no token.
+      - name: Checkout consumer
+        uses: actions/checkout@v4
+        with: { path: app }
+      - name: Checkout qa-kit (sibling, for link:../qa-kit)
+        uses: actions/checkout@v4
+        with: { repository: TangoGroup/qa-kit, path: qa-kit }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      # pnpm links the optional qa-kit dep only if ../qa-kit already exists — so the
+      # sibling checkout above MUST run before this install.
+      - name: Install consumer deps
+        working-directory: app
+        run: pnpm install
+      # The deterministic lattice ingests BEFORE its exit-1, so continue-on-error lets
+      # the sweep record + ingest findings without painting the whole nightly red —
+      # the dashboard is the signal, not this job's status.
+      - name: Run qa-kit RBAC lattice sweep
+        working-directory: app
+        continue-on-error: true
+        env:
+          QA_DASHBOARD_SUPABASE_URL: "${{ secrets.qa_dashboard_supabase_url }}"
+          QA_DASHBOARD_SERVICE_KEY: "${{ secrets.qa_dashboard_service_key }}"
+        run: |
+          DATE=$(date +%F); RUN="qa-sweep-rbac-$(date +%Y%m%d-%H%M%S)"
+          CFG=$(pnpm exec tsx -e "import('./qa.config.ts').then(m=>process.stdout.write(JSON.stringify(m.default.default??m.default)))")
+          # Resolve the oracle path (cfg.rbac.fieldVisibility) absolute, relative to the
+          # app working dir. Uses node:path via an ESM import (workflow-sandbox-safe).
+          ORACLE=$(node --input-type=module -e "import {resolve} from 'node:path'; const c=JSON.parse(process.argv[1]); process.stdout.write(resolve(c.rbac.fieldVisibility))" "$CFG")
+          pnpm exec tsx node_modules/qa-kit/bin/qa-rbac.mjs "$CFG" "$ORACLE" qa-testing/findings "$RUN" "$DATE"
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: qa-sweep-rbac-findings, path: app/qa-testing/findings/**/* }
