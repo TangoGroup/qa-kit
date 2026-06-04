@@ -1,6 +1,6 @@
 export type TenancyConfig = { key: string; scopeHierarchy?: string[]; accessHelper: string; bypassRoles?: string[] };
 export type PersonasConfig = { source?: string; loginAs?: string; matrix: string[]; roleMap?: Record<string, string> };
-export type EnvConfig = { baseUrl: string; readOnly?: boolean };
+export type EnvConfig = { baseUrl: string; readOnly?: boolean; healthPath?: string };
 export type SurfaceConfig = { actions?: string; apiRoutes?: string; publicRoutes?: string[] };
 export type RubricsConfig = {
   visual?: { baselineDir: string; maxDiffPixelRatio?: number; aiReview?: boolean };
