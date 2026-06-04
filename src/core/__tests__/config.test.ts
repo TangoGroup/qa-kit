@@ -29,4 +29,12 @@ describe("defineQAConfig", () => {
   ])("throws when %s is missing", (_label, bad) => {
     expect(() => defineQAConfig(bad as QAConfig)).toThrow();
   });
+  it("accepts personas.roleMap and rubrics.persona.flows", () => {
+    const cfg = defineQAConfig({ ...valid,
+      personas: { matrix: ["campus_staff"], loginAs: "loginAs", roleMap: { campus_staff: "jake" } },
+      rubrics: { persona: { dimensions: [{ key: "taskCompletion", weight: 1.5, max: 5 }], passThreshold: 3, flows: ["log a note"] } },
+    });
+    expect(cfg.personas.roleMap?.campus_staff).toBe("jake");
+    expect(cfg.rubrics?.persona?.flows).toEqual(["log a note"]);
+  });
 });
