@@ -23,6 +23,10 @@ describe("renderQaConfig", () => {
     expect(cfg).toMatch(/matrix: \[/);
     expect(cfg).toContain("TODO");                // visible markers
   });
+  it("escapes string values so a quote in the input cannot break the generated TS", () => {
+    const out = renderQaConfig({ appName: 'ac"me', repo: "r" });
+    expect(out).toContain(`name: ${JSON.stringify('ac"me')}`); // i.e. name: "ac\"me"
+  });
 });
 
 describe("QA_KIT_DEP", () => {
