@@ -87,9 +87,25 @@ The deploy gate needs two things from the app:
 ## CI: the reusable deploy-gate workflow (`uses:`)
 
 qa-kit ships a reusable (`workflow_call`) workflow at
-`.github/workflows/qa-gate.yml`. It checks out the consumer at `expected_sha`, installs
-(pnpm + Node 22 + Playwright chromium), resolves `qa.config.ts`, runs
-`node node_modules/qa-kit/bin/qa-deploy-gate.mjs`, and uploads the findings as an artifact.
+`.github/workflows/qa-gate.yml`. It checks out the consumer (to `app/`) at `expected_sha` **and**
+qa-kit itself (to a sibling `qa-kit/`), installs (pnpm + Node 22 + Playwright chromium), resolves
+`qa.config.ts`, runs the gate via `pnpm exec tsx node_modules/qa-kit/bin/qa-deploy-gate.mjs`, and
+uploads the findings as an artifact.
+
+Two things make this work on a CI runner:
+
+- **Sibling checkout (resolves the optional `link:` dep).** Consumers depend on qa-kit as an
+  OPTIONAL `link:../qa-kit` dependency, kept optional so a normal app build (e.g. on Vercel) never
+  breaks when qa-kit isn't present. On a CI runner there's no sibling qa-kit dir, so the link is
+  dead and the gate can't run. The reusable workflow therefore checks out the consumer to `app/`
+  and qa-kit to a sibling `qa-kit/` under the workspace — from `app/`, `../qa-kit` resolves — and
+  the qa-kit checkout runs **before** `pnpm install` (pnpm only links the optional dep if its
+  target already exists). qa-kit is a public repo, so no token is needed.
+- **Run the bin via `tsx`, not `node`.** qa-kit's package `exports` point at TypeScript **source**
+  (`qa-kit/core`, `qa-kit/evals` → `.ts`), and the bin imports from them. Plain `node` cannot load
+  a `.ts` module, so the gate runs under `tsx` (which transpiles on import, exactly like the
+  `pnpm exec tsx -e` config-resolution step). **The consumer must have `tsx` available** (a
+  devDependency, or runnable via `pnpm exec tsx`).
 
 A consuming repo references it from a thin caller wired to its own post-deploy trigger:
 
@@ -121,17 +137,8 @@ The gate **fails the deploy (exit 1)** on a critical finding — a bundle-SHA mi
 points at a stale/cached build) or any round-trip failure. On failure, roll back the alias:
 `vercel alias <previous-deployment-url> <alias> --scope team-gloo`.
 
-### PREREQUISITE — org Actions access (cross-repo `uses:` from a private repo)
-
-`uses: TangoGroup/qa-kit/...` only resolves if the TangoGroup org permits the **private** qa-kit
-repo to be used by other org repositories. This is a one-time, manual GitHub setting — it cannot
-be automated from a workflow:
-
-> **GitHub → `qa-kit` repo → Settings → Actions → General → "Access"**
-> set **"Accessible from repositories in the `TangoGroup` organization"**.
-
-Without this, the caller fails to resolve the reusable workflow (the run errors before any job
-starts). Set it once per org/repo.
+qa-kit is a **public** repo, so the `uses: TangoGroup/qa-kit/...` reference resolves with no org
+Actions-access setting and no token.
 
 ---
 
@@ -161,10 +168,11 @@ The same deterministic core + advisory LLM tiers run from four entry points:
 
 ## Direct runner usage
 
-The deploy gate's deterministic core can be invoked directly (this is what `qa-gate.yml` runs):
+The deploy gate's deterministic core can be invoked directly (this is what `qa-gate.yml` runs).
+Run it under `tsx` — the bin imports qa-kit's `.ts` source exports, which `node` cannot load:
 
 ```bash
-node node_modules/qa-kit/bin/qa-deploy-gate.mjs \
+pnpm exec tsx node_modules/qa-kit/bin/qa-deploy-gate.mjs \
   "$CFG" "$DEPLOYED_URL" "$EXPECTED_SHA" qa-testing/findings "$RUN_ID" "$DATE"
 ```
 

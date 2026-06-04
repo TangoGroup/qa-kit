@@ -12,6 +12,10 @@
       "default": "./src/evals/index.ts"
     }
   },
+  "bin": {
+    "qa-deploy-gate": "./bin/qa-deploy-gate.mjs",
+    "qa-visual-eval": "./bin/qa-visual-eval.mjs"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
