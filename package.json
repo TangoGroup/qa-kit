@@ -10,6 +10,10 @@
     "./evals": {
       "types": "./src/evals/index.ts",
       "default": "./src/evals/index.ts"
+    },
+    "./dashboard": {
+      "types": "./src/dashboard/index.ts",
+      "default": "./src/dashboard/index.ts"
     }
   },
   "bin": {
